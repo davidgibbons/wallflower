@@ -1,0 +1,62 @@
+image:
+  repository: ghcr.io/davidgibbons/wallflower
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Required. The page Chromium shows full-screen.
+dashboardUrl: ""
+
+# Power the panel from a Home Assistant entity: on while it reads on/playing/
+# idle/paused, off after `offConfirms` off/standby/unavailable reads. Leave any
+# of haUrl, entity or tokenSecret.name empty and the panel stays lit.
+presence:
+  haUrl: ""
+  entity: ""
+  # A Secret holding a Home Assistant long-lived access token.
+  tokenSecret:
+    name: ""
+    key: HA_TOKEN
+  pollSeconds: 30
+  offConfirms: 3
+
+# Extra container environment, such as TZ, CHROMIUM_FLAGS, OUTPUT, MODE or
+# ROTATE (see the README).
+env: []
+
+# Chromium's profile, so a dashboard login survives restarts.
+persistence:
+  enabled: true
+  # Use a PVC you manage instead of creating one.
+  existingClaim: ""
+  size: 1Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+
+# An extended resource that marks the node the panel is plugged into, such as
+# one advertised by a USB device plugin. When set, the pod requests one, which
+# also places it on that node.
+panelResource: ""
+
+# X learns about input hotplug from udev netlink, which only reaches the host
+# network namespace.
+hostNetwork: true
+
+# Chromium needs more than the container default of 64 MB.
+shmSize: 512Mi
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

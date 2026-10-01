@@ -1,0 +1,112 @@
+#!/bin/bash
+# Power the panel from a Home Assistant presence entity.
+set -u
+
+log() { echo "[ha-display-sync] $(date '+%H:%M:%S') $*"; }
+
+# Pure decision step, kept separate so test/test-display-sync.sh can drive it.
+# decide <state> <is_on> <streak> <confirms> -> "<action> <is_on> <streak>"  (is_on: true|false|-)
+decide() {
+    local state=$1 is_on=$2 streak=$3 confirms=$4
+    case "$state" in
+        on|playing|idle|paused)
+            if [ "$is_on" = "true" ]; then echo "keepalive true 0"
+            else echo "on true 0"; fi ;;
+        off|standby|unavailable)
+            streak=$(( streak + 1 ))
+            if [ "$is_on" != "false" ] && [ "$streak" -ge "$confirms" ]; then
+                echo "off false $streak"
+            else
+                echo "wait $is_on $streak"
+            fi ;;
+        *)  echo "unknown $is_on $streak" ;;
+    esac
+}
+
+# Presence sync needs all three; without them the panel stays lit.
+presence_configured() { [ -n "${HA_URL:-}" ] && [ -n "${HA_ENTITY:-}" ] && [ -n "${HA_TOKEN:-}" ]; }
+
+[ "${HA_DISPLAY_SYNC_LIB:-}" = "1" ] && return 0
+
+. /run/kiosk.conf
+
+resolve_output() {
+    [ -n "${OUTPUT:-}" ] && { echo "$OUTPUT"; return; }
+    # An output stays "connected" while its CRTC is off, so this keeps
+    # working across power cycles.
+    xrandr --query | awk '$2 == "connected" {print $1; exit}'
+}
+
+fix_touch() {
+    local out=$1 id
+    # Touch devices re-enumerate over USB when the panel wakes. Match by name
+    # so we survive the ID changing.
+    xinput list 2>/dev/null | grep -v 'master \|XTEST' | while read -r line; do
+        id=$(printf '%s' "$line" | grep -o 'id=[0-9]*' | cut -d= -f2)
+        [ -n "$id" ] || continue
+        printf '%s' "$line" | grep -qi 'touch' || \
+            xinput list-props "$id" 2>/dev/null | grep -q 'libinput Calibration Matrix' || continue
+        xinput set-prop "$id" "libinput Send Events Mode Enabled" 0 0 2>/dev/null
+        xinput map-to-output "$id" "$out" 2>/dev/null
+        log "touch fix: id=$id -> $out"
+    done
+}
+
+display_on() {
+    local out; out=$(resolve_output)
+    [ -z "$out" ] && { log "WARN: no connected output"; return; }
+    if [ -n "${MODE:-}" ]; then
+        xrandr --output "$out" --mode "$MODE" --rotate "${ROTATE:-normal}"
+    else
+        xrandr --output "$out" --auto --rotate "${ROTATE:-normal}"
+    fi
+    xset s off s noblank
+    xset -dpms
+    log "display ON ($out, state=$1)"
+    { sleep 5; fix_touch "$out"; } &
+}
+
+display_off() {
+    local out; out=$(resolve_output)
+    [ -z "$out" ] && return
+    xrandr --output "$out" --off
+    log "display OFF ($out, state=$1)"
+}
+
+main() {
+    xset s off s noblank -dpms
+
+    if ! presence_configured; then
+        log "presence off (HA_URL, HA_ENTITY or HA_TOKEN unset); leaving the panel on"
+        while :; do sleep 3600; done
+    fi
+
+    local is_on="-" streak=0 raw state action
+    while :; do
+        raw=$(curl -sf --max-time 10 \
+            -H "Authorization: Bearer ${HA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${HA_URL}/api/states/${HA_ENTITY}" 2>/dev/null)
+
+        if [ -z "$raw" ]; then
+            log "WARN: failed to reach HA, skipping"
+            sleep "$HA_POLL"
+            continue
+        fi
+
+        state=$(printf '%s' "$raw" | jq -r '.state' 2>/dev/null)
+        read -r action is_on streak <<<"$(decide "$state" "$is_on" "$streak" "$HA_OFF_CONFIRMS")"
+
+        case "$action" in
+            on)        display_on "$state" ;;
+            off)       display_off "$state" ;;
+            keepalive) xset -dpms s off s noblank &>/dev/null ;;
+            wait)      log "off signal ($streak/$HA_OFF_CONFIRMS) — waiting to confirm" ;;
+            unknown)   log "unknown state: $state" ;;
+        esac
+
+        sleep "$HA_POLL"
+    done
+}
+
+main

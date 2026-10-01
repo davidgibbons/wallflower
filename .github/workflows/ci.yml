@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Two pushes racing would fight over the release branch and PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./test/test-display-sync.sh
+      - name: Lint and render the chart
+        run: |
+          set -euo pipefail
+          curl -fsSL https://get.helm.sh/helm-v3.16.2-linux-amd64.tar.gz | tar -xz -C /tmp
+          /tmp/linux-amd64/helm lint chart --set dashboardUrl=https://example.test
+          /tmp/linux-amd64/helm template t chart --set dashboardUrl=https://example.test >/dev/null
+          ! /tmp/linux-amd64/helm template t chart >/dev/null 2>&1
+
+  # A push that lands a new VERSION (the merged release PR) tags it, and the
+  # mirror carries the tag to GitHub, where publish.yml builds it. Any other
+  # push opens or refreshes the release PR from the conventional commits.
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install knope
+        run: |
+          curl -fsSL https://github.com/knope-dev/knope/releases/download/knope/v0.23.0/knope-x86_64-unknown-linux-musl.tgz |
+            tar -xz -C /usr/local/bin --strip-components=1
+      - name: Tag, or update the release PR
+        env:
+          TOKEN: ${{ secrets.FJ_PAT }}
+          GIT_USER: ${{ secrets.FJ_PAT_USER }}
+        run: |
+          set -euo pipefail
+          # Release commits and tags reach the public mirror, so they carry
+          # the noreply identity.
+          git config user.name davidgibbons
+          git config user.email 814809+davidgibbons@users.noreply.github.com
+          git remote set-url origin "https://${GIT_USER}:${TOKEN}@${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git"
+          api="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
+          VERSION=$(cat VERSION)
+          if ! git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            git tag -a "v${VERSION}" -m "v${VERSION}"
+            git push origin "v${VERSION}"
+          # knope exits 1 when no commit since the last tag warrants a release,
+          # so ask it first. Only a releasable change makes it stage files.
+          elif knope prepare-release --dry-run 2>&1 | grep -q '^Would add files to git'; then
+            knope prepare-release
+            NEW=$(cat VERSION)
+            if ! curl -sf -H "Authorization: token ${TOKEN}" "${api}/pulls/main/release" >/dev/null; then
+              jq -n --arg t "chore: release ${NEW}" --arg b "Merging this tags v${NEW}, which publishes the image and chart to ghcr.io." \
+                '{head: "release", base: "main", title: $t, body: $b}' |
+                curl -sf -X POST -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" -d @- "${api}/pulls" >/dev/null
+            fi
+          else
+            echo "Nothing to release since v${VERSION}"
+          fi

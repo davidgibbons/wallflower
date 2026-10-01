@@ -1,0 +1,111 @@
+{{- $dashboard := required "dashboardUrl is required" .Values.dashboardUrl -}}
+{{- $p := .Values.presence -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wallflower.fullname" . }}
+  labels:
+    {{- include "wallflower.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # Two copies would fight over the display and the profile.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wallflower.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wallflower.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      # X runs as root and drops Chromium to the image's kiosk user (uid 1000).
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+        fsGroup: 1000
+      containers:
+        - name: wallflower
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # X needs the node's GPU, a VT and the input devices.
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+          env:
+            - name: DASHBOARD_URL
+              value: {{ $dashboard | quote }}
+            {{- if and $p.haUrl $p.entity $p.tokenSecret.name }}
+            - name: HA_URL
+              value: {{ $p.haUrl | quote }}
+            - name: HA_ENTITY
+              value: {{ $p.entity | quote }}
+            - name: HA_POLL
+              value: {{ $p.pollSeconds | quote }}
+            - name: HA_OFF_CONFIRMS
+              value: {{ $p.offConfirms | quote }}
+            - name: HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $p.tokenSecret.name }}
+                  key: {{ $p.tokenSecret.key }}
+                  # A missing token leaves the panel lit rather than failing the pod.
+                  optional: true
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: profile
+              mountPath: /home/kiosk
+            {{- end }}
+            # Host /dev/input rather than the devices captured at pod start: a
+            # touchscreen re-enumerates every time the panel wakes.
+            - name: input
+              mountPath: /dev/input
+            - name: udev
+              mountPath: /run/udev
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+          {{- $res := deepCopy .Values.resources }}
+          {{- with .Values.panelResource }}
+          {{- $_ := set $res "requests" (merge (dict . "1") (default dict $res.requests)) }}
+          {{- $_ := set $res "limits" (merge (dict . "1") (default dict $res.limits)) }}
+          {{- end }}
+          resources:
+            {{- toYaml $res | nindent 12 }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: profile
+          persistentVolumeClaim:
+            claimName: {{ include "wallflower.claimName" . }}
+        {{- end }}
+        - name: input
+          hostPath:
+            path: /dev/input
+        - name: udev
+          hostPath:
+            path: /run/udev
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.shmSize }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

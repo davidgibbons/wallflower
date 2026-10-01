@@ -1,0 +1,27 @@
+# Kiosk defaults. An environment variable of the same name overrides any of
+# them; kiosk-container writes the result to /run/kiosk.conf.
+
+# Page Chromium shows. Required: the container exits without it.
+DASHBOARD_URL=""
+
+# Presence sync. With any of these empty, the panel stays lit.
+HA_URL=""
+HA_TOKEN=""
+HA_ENTITY=""
+HA_POLL=30
+HA_OFF_CONFIRMS=3
+
+# Seconds to wait before relaunching Chromium after it exits.
+RESTART_SEC=15
+
+# Extra Chromium flags, split on spaces. --disable-gpu keeps Chromium off a GPU
+# that is shared with other work.
+CHROMIUM_FLAGS=""
+
+# Display knobs. Empty OUTPUT = autodetect the first connected xrandr output.
+# Set MODE, such as 2560x720, if EDID negotiation picks the wrong one.
+OUTPUT=""
+MODE=""
+ROTATE="normal"
+
+TZ="Etc/UTC"

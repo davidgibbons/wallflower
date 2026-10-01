@@ -1,0 +1,27 @@
+[package]
+versioned_files = [
+  { path = "VERSION", regex = '^(?<version>\d+\.\d+\.\d+)' },
+  { path = "chart/Chart.yaml", regex = '(?m)^version: (?<version>\d+\.\d+\.\d+)' },
+  { path = "chart/Chart.yaml", regex = 'appVersion: "(?<version>\d+\.\d+\.\d+)"' },
+]
+changelog = "CHANGELOG.md"
+
+# Run by CI on a push to main that has releasable commits: stages the version
+# bump and changelog on the `release` branch. CI opens the PR.
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -C release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force origin release"

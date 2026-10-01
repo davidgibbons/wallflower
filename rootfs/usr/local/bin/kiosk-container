@@ -1,0 +1,26 @@
+#!/bin/bash
+# Container entrypoint. Settings come from environment variables; anything
+# unset keeps its kiosk.defaults value.
+set -euo pipefail
+
+{
+    cat /etc/kiosk.defaults
+    for v in DASHBOARD_URL HA_URL HA_TOKEN HA_ENTITY HA_POLL HA_OFF_CONFIRMS \
+             RESTART_SEC OUTPUT MODE ROTATE TZ CHROMIUM_FLAGS; do
+        if [ -n "${!v:-}" ]; then printf '%s=%q\n' "$v" "${!v}"; fi
+    done
+} > /run/kiosk.conf
+if ! (. /run/kiosk.conf && [ -n "$DASHBOARD_URL" ]); then
+    echo "wallflower: DASHBOARD_URL is required" >&2
+    exit 1
+fi
+chown root:kiosk /run/kiosk.conf
+chmod 0640 /run/kiosk.conf
+# The session reads the token from /run/kiosk.conf; keep it out of Chromium's environment.
+unset HA_TOKEN
+
+# X runs as root and the session as kiosk, because Chromium refuses to run as
+# root with its sandbox on. When X exits, xinit and the container exit with it.
+# -nocursor: the panel is touch-only, so X draws no pointer.
+exec xinit /usr/sbin/runuser -u kiosk /usr/local/bin/kiosk-session \
+    -- /usr/bin/Xorg :0 vt7 -nolisten tcp -novtswitch -nocursor

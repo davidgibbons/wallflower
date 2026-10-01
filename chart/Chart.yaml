@@ -1,0 +1,10 @@
+apiVersion: v2
+name: wallflower
+description: An Xorg and Chromium kiosk that shows a dashboard on a panel attached to a Kubernetes node.
+type: application
+# CI sets version and appVersion from VERSION when it packages the chart.
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/davidgibbons/wallflower
+sources:
+  - https://github.com/davidgibbons/wallflower

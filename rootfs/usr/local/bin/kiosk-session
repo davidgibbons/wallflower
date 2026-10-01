@@ -1,0 +1,47 @@
+#!/bin/bash
+# X session: one presence daemon plus a Chromium that always comes back.
+set -u
+. /run/kiosk.conf
+
+PROFILE=/home/kiosk/.config/chromium
+
+xset s off
+xset s noblank
+xset -dpms
+
+/usr/local/bin/ha-display-sync &
+
+while :; do
+    # Stale singleton locks and restore state are what wedge a kiosk Chromium
+    # after an unclean exit. Clear both every launch.
+    find "$PROFILE" \( -name SingletonLock -o -name SingletonSocket -o -name SingletonCookie \) -delete 2>/dev/null
+    rm -rf "$PROFILE/Default/Sessions" 2>/dev/null
+    rm -f "$PROFILE/Default/Last Session" "$PROFILE/Default/Last Tabs" \
+          "$PROFILE/Default/Current Session" "$PROFILE/Default/Current Tabs" 2>/dev/null
+
+    # --kiosk asks a window manager for fullscreen, and there is none, so size
+    # the window to the screen ourselves.
+    screen=$(xrandr --query | sed -n 's/.*current \([0-9]*\) x \([0-9]*\),.*/\1,\2/p')
+
+    chromium \
+        --kiosk \
+        --window-position=0,0 \
+        ${screen:+--window-size=$screen} \
+        --ozone-platform=x11 \
+        --user-data-dir="$PROFILE" \
+        --touch-events=enabled \
+        --password-store=basic \
+        --no-first-run \
+        --no-default-browser-check \
+        --noerrdialogs \
+        --disable-infobars \
+        --disable-session-crashed-bubble \
+        --disable-restore-session-state \
+        --disable-features=TranslateUI \
+        --check-for-update-interval=31536000 \
+        ${CHROMIUM_FLAGS:-} \
+        "$DASHBOARD_URL"
+
+    echo "[kiosk] chromium exited ($?), restarting in ${RESTART_SEC}s"
+    sleep "$RESTART_SEC"
+done
