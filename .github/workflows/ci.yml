@@ -57,6 +57,10 @@ jobs:
           if ! git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
             git tag -a "v${VERSION}" -m "v${VERSION}"
             git push origin "v${VERSION}"
+            # A push from inside a workflow doesn't trigger workflows, so start
+            # the mirror ourselves to carry the tag to GitHub.
+            curl -sf -X POST -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" \
+              -d '{"ref":"main"}' "${api}/actions/workflows/mirror-to-github.yml/dispatches"
           # knope exits 1 when no commit since the last tag warrants a release,
           # so ask it first. Only a releasable change makes it stage files.
           elif knope prepare-release --dry-run 2>&1 | grep -q '^Would add files to git'; then
