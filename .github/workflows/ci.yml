@@ -29,7 +29,8 @@ jobs:
   # push opens or refreshes the release PR from the conventional commits.
   release:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The GitHub replica runs CI too, but has no release secrets.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.server_url != 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +50,8 @@ jobs:
           # the noreply identity.
           git config user.name davidgibbons
           git config user.email 814809+davidgibbons@users.noreply.github.com
-          git remote set-url origin "https://${GIT_USER}:${TOKEN}@${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git"
+          # The runner may reach the server over plain HTTP; keep its scheme.
+          git remote set-url origin "${GITHUB_SERVER_URL%%://*}://${GIT_USER}:${TOKEN}@${GITHUB_SERVER_URL#*://}/${GITHUB_REPOSITORY}.git"
           api="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
           VERSION=$(cat VERSION)
           if ! git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
