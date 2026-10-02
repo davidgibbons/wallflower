@@ -62,15 +62,22 @@ display_on() {
     fi
     xset s off s noblank
     xset -dpms
+    resume_browser
     log "display ON ($out, state=$1)"
     { sleep 5; fix_touch "$out"; } &
 }
+
+# A blanked panel still has Chromium painting every frame. Freezing it saves
+# that CPU or GPU work; the page reconnects to its backend when resumed.
+pause_browser()  { pkill -STOP -x chromium 2>/dev/null; }
+resume_browser() { pkill -CONT -x chromium 2>/dev/null; }
 
 display_off() {
     local out; out=$(resolve_output)
     [ -z "$out" ] && return
     xrandr --output "$out" --off
-    log "display OFF ($out, state=$1)"
+    pause_browser
+    log "display OFF ($out, state=$1), chromium paused"
 }
 
 main() {
@@ -101,7 +108,9 @@ main() {
             on)        display_on "$state" ;;
             off)       display_off "$state" ;;
             keepalive) xset -dpms s off s noblank &>/dev/null ;;
-            wait)      log "off signal ($streak/$HA_OFF_CONFIRMS) — waiting to confirm" ;;
+            # kiosk-session relaunches a Chromium that exits, unpaused.
+            wait)      [ "$is_on" = "false" ] && pause_browser
+                       log "off signal ($streak/$HA_OFF_CONFIRMS) — waiting to confirm" ;;
             unknown)   log "unknown state: $state" ;;
         esac
 

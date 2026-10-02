@@ -52,7 +52,8 @@ With `presence.haUrl`, `presence.entity` and a token all set, wallflower polls
 the entity. An `on`, `playing`, `idle` or `paused` state lights the panel.
 `offConfirms` consecutive `off`, `standby` or `unavailable` reads blank it with
 `xrandr --output <out> --off`, which drops the CRTC so the panel really powers
-down. When it wakes, the touchscreen is remapped once USB has re-enumerated.
+down, and freezes Chromium so a blank panel does no rendering. When it wakes,
+Chromium resumes and the touchscreen is remapped once USB has re-enumerated.
 
 Leave any of the three unset and the panel stays lit. Screen blanking and DPMS
 are off either way.
