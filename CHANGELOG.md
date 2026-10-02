@@ -1,3 +1,9 @@
+## 0.2.1 (2026-10-02)
+
+### Features
+
+- pause Chromium while the panel is off
+
 ## 0.2.0 (2026-10-01)
 
 First public release.
