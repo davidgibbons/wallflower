@@ -11,6 +11,13 @@ xset -dpms
 
 /usr/local/bin/ha-display-sync &
 
+# Chromium deletes superseded CRLSet versions only at startup, and a new one
+# lands about twice a day, so a kiosk that runs for weeks fills its volume.
+while :; do
+    ls -d "$PROFILE"/CertificateRevocation/*/ 2>/dev/null | sort -V | head -n -1 | xargs -r -d '\n' rm -rf
+    sleep 3600
+done &
+
 while :; do
     # Stale singleton locks and restore state are what wedge a kiosk Chromium
     # after an unclean exit. Clear both every launch.
