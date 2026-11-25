@@ -61,9 +61,9 @@ jobs:
             # the mirror ourselves to carry the tag to GitHub.
             curl -sf -X POST -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" \
               -d '{"ref":"main"}' "${api}/actions/workflows/mirror-to-github.yml/dispatches"
-          # knope exits 1 when no commit since the last tag warrants a release,
-          # so ask it first. Only a releasable change makes it stage files.
-          elif knope prepare-release --dry-run 2>&1 | grep -q '^Would add files to git'; then
+          # Any knope error fails the job; only a releasable change bumps VERSION.
+          elif plan=$(knope prepare-release --dry-run 2>&1) || { echo "$plan"; exit 1; }
+               grep -q '^Would add the following to VERSION' <<<"$plan"; then
             knope prepare-release
             NEW=$(cat VERSION)
             if ! curl -sf -H "Authorization: token ${TOKEN}" "${api}/pulls/main/release" >/dev/null; then
