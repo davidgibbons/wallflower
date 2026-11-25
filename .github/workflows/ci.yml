@@ -66,7 +66,9 @@ jobs:
                grep -q '^Would add the following to VERSION' <<<"$plan"; then
             knope prepare-release
             NEW=$(cat VERSION)
-            if ! curl -sf -H "Authorization: token ${TOKEN}" "${api}/pulls/main/release" >/dev/null; then
+            # Not /pulls/main/release: it also returns a closed release PR.
+            if ! curl -sf -H "Authorization: token ${TOKEN}" "${api}/pulls?state=open&limit=50" |
+                 jq -e 'any(.[]; .head.ref == "release")' >/dev/null; then
               jq -n --arg t "chore: release ${NEW}" --arg b "Merging this tags v${NEW}, which publishes the image and chart to ghcr.io." \
                 '{head: "release", base: "main", title: $t, body: $b}' |
                 curl -sf -X POST -H "Authorization: token ${TOKEN}" -H "Content-Type: application/json" -d @- "${api}/pulls" >/dev/null
