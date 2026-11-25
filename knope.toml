@@ -1,8 +1,7 @@
 [package]
+# Only VERSION: publish.yml stamps the chart's version and appVersion from the tag.
 versioned_files = [
   { path = "VERSION", regex = '^(?<version>\d+\.\d+\.\d+)' },
-  { path = "chart/Chart.yaml", regex = '(?m)^version: (?<version>\d+\.\d+\.\d+)' },
-  { path = "chart/Chart.yaml", regex = 'appVersion: "(?<version>\d+\.\d+\.\d+)"' },
 ]
 changelog = "CHANGELOG.md"
 
