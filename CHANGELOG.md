@@ -1,3 +1,10 @@
+## 0.2.2 (2026-11-25)
+
+### Fixes
+
+- prune superseded CRLSet versions hourly
+- open the release PR again, and fail on a knope error
+
 ## 0.2.1 (2026-10-02)
 
 ### Features
