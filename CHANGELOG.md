@@ -1,3 +1,9 @@
+## 0.2.3 (2026-11-26)
+
+### Fixes
+
+- look for an open release PR, not any release PR
+
 ## 0.2.2 (2026-11-25)
 
 ### Fixes
